@@ -4,12 +4,11 @@ from elevenlabs.client import ElevenLabs
 from dotenv import load_dotenv
 from pydub import AudioSegment
 from rq import Queue
-from redis import Redis
 import os
 import re
 import io
 import time
-from urllib.parse import urlparse
+from redis_config import get_redis_connection
 
 load_dotenv()
 if not os.path.exists("static"):
@@ -18,18 +17,7 @@ if not os.path.exists("static"):
 app = Flask(__name__)
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 elevenlabs_client = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
-
-# Parse REDIS_URL and configure Redis connection
-redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
-parsed_url = urlparse(redis_url)
-redis_conn = Redis(
-    host=parsed_url.hostname,
-    port=parsed_url.port,
-    username=parsed_url.username,
-    password=parsed_url.password,
-    ssl=True,  # Enable SSL for Heroku Redis
-    ssl_cert_reqs=None  # Disable certificate verification (temporary fix)
-)
+redis_conn = get_redis_connection()
 q = Queue(connection=redis_conn)
 
 def generate_audio_task(script):
@@ -71,7 +59,7 @@ def index():
     if request.method == "POST":
         situation = request.form["situation"]
         script = generate_meditation_script(situation)
-        job = q.enqueue(generate_audio_task, script, job_timeout=600)  # 10 min timeout
+        job = q.enqueue(generate_audio_task, script, job_timeout=600)
         return jsonify({"job_id": job.id})
     return render_template("index.html")
 
