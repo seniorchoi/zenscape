@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, jsonify, url_for
+from flask import Flask, request, render_template, jsonify, url_for, send_file
 from openai import OpenAI
 from elevenlabs.client import ElevenLabs
 from dotenv import load_dotenv
@@ -55,10 +55,14 @@ def generate_audio_task(script):
             final_audio += AudioSegment.silent(duration=30000)
 
     final_audio = final_audio.overlay(bg_music, position=0)
-    audio_path = os.path.join(os.path.dirname(__file__), 'static', 'meditation.mp3')
-    final_audio.export(audio_path, format="mp3")
-    logging.info(f"Audio saved at: {audio_path}, exists: {os.path.exists(audio_path)}")
-    return "meditation.mp3"  # Return filename only
+    audio_buffer = io.BytesIO()
+    final_audio.export(audio_buffer, format="mp3")
+    audio_data = audio_buffer.getvalue()
+    audio_buffer.close()
+    job_id = rq.get_current_job().id  # Get job ID in worker context
+    redis_conn.setex(f"audio:{job_id}", 3600, audio_data)  # Store for 1 hour
+    logging.info(f"Audio stored in Redis for job {job_id}")
+    return job_id  # Return job ID to fetch audio later
 
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -75,17 +79,28 @@ def check_status(job_id):
     if job is None or job.is_failed:
         return jsonify({"status": "failed"})
     elif job.is_finished:
-        audio_filename = job.result  # Get filename from worker
-        audio_url = url_for('static', filename=audio_filename, _external=True)
+        audio_url = url_for('get_audio', job_id=job_id, _external=True)
         return jsonify({"status": "done", "audio_url": audio_url})
     else:
         return jsonify({"status": "processing"})
+
+@app.route("/audio/<job_id>")
+def get_audio(job_id):
+    audio_data = redis_conn.get(f"audio:{job_id}")
+    if audio_data is None:
+        return "Audio not found", 404
+    return send_file(
+        io.BytesIO(audio_data),
+        mimetype="audio/mp3",
+        as_attachment=False,
+        download_name="meditation.mp3"
+    )
 
 def generate_meditation_script(situation):
     prompt = f"""
     Create a 10-minute guided meditation script for someone feeling anxious about '{situation}'. 
     Keep it calm, positive, and soothing. Include a short intro, breathing exercises, visualization, 
-    and a gentle closing. Aim for about 800-1000 words (roughly 10 minutes when spoken). 
+    and a gentle closing. Aim for about 500 words (roughly 5 minutes when spoken). 
     Naturally incorporate the exact phrase 'now, take a moment of silence' here and there throughout 
     the script to indicate pauses, using it at least 3-5 times in appropriate spots. 
     Do not use Markdown, asterisks (*), bullet points, or any special formatting characters—just plain text.
