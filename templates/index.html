@@ -2,94 +2,57 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Guided Meditation Generator</title>
+    <title>Zenscape Meditation</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <h1>Create Your Guided Meditation</h1>
+    <h1>Create a Meditation</h1>
     <form id="meditation-form">
-        <label for="situation">What’s making you anxious?</label><br>
-        <input type="text" id="situation" name="situation" placeholder="e.g., before job interview" required><br>
+        <textarea name="text" placeholder="Enter meditation text here"></textarea>
         <button type="submit">Generate Meditation</button>
     </form>
-
-    <div id="loading" style="display: none;">
-        <div class="spinner"></div>
-        <p>Your audio is being generated...</p>
-        <div class="loading-bar">
-            <div class="progress" style="width: 0%;">0%</div>
-        </div>
-    </div>
-
-    <div id="audio-player" style="display: none;">
-        <audio controls>
-            <source id="audio-source" src="" type="audio/mp3">
-            Your browser does not support the audio element.
-        </audio>
-    </div>
+    <div id="status">Waiting...</div>
+    <audio id="audio-player" controls style="display: none;"></audio>
 
     <script>
-        document.getElementById("meditation-form").addEventListener("submit", function(event) {
-            event.preventDefault();
-            const form = this;
-            const situation = form.situation.value;
+        const form = document.getElementById('meditation-form');
+        const statusDiv = document.getElementById('status');
+        const audioPlayer = document.getElementById('audio-player');
 
-            const loadingDiv = document.getElementById("loading");
-            const progressBar = loadingDiv.querySelector(".progress");
-            loadingDiv.style.display = "block";
-            document.getElementById("audio-player").style.display = "none";
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            statusDiv.textContent = 'Processing...';
+            audioPlayer.style.display = 'none';
 
-            let progress = 0;
-            progressBar.style.width = "0%";
-            progressBar.textContent = "0%";
-            const totalTime = 120000;
-            const increment = 100 / (totalTime / 100);
-            const interval = setInterval(() => {
-                progress += increment;
-                if (progress >= 100) progress = 100;
-                progressBar.style.width = progress + "%";
-                progressBar.textContent = Math.round(progress) + "%";
-            }, 100);
-
-            fetch("/", {
-                method: "POST",
-                body: new FormData(form),
-                headers: { "X-Requested-With": "XMLHttpRequest" }
-            })
-            .then(response => response.json())
-            .then(data => {
-                const jobId = data.job_id;
-                const checkStatus = () => {
-                    fetch(`/status/${jobId}`)
-                    .then(resp => resp.json())
-                    .then(status => {
-                        if (status.status === "done") {
-                            clearInterval(interval);
-                            progressBar.style.width = "100%";
-                            progressBar.textContent = "100%";
-                            setTimeout(() => { loadingDiv.style.display = "none"; }, 500);
-                            const audioSource = document.getElementById("audio-source");
-                            audioSource.src = status.audio_url + "?t=" + new Date().getTime();
-                            document.getElementById("audio-player").style.display = "block";
-                            document.querySelector("audio").load();
-                        } else if (status.status === "failed") {
-                            clearInterval(interval);
-                            loadingDiv.style.display = "none";
-                            alert("Audio generation failed.");
-                        } else {
-                            setTimeout(checkStatus, 2000); // Poll every 2s
-                        }
-                    });
-                };
-                checkStatus();
-            })
-            .catch(error => {
-                clearInterval(interval);
-                loadingDiv.style.display = "none";
-                alert("An error occurred: " + error);
+            const formData = new FormData(form);
+            const response = await fetch('/', {
+                method: 'POST',
+                body: formData
             });
+            const data = await response.json();
+            const jobId = data.job_id;
+
+            checkStatus(jobId);
         });
+
+        async function checkStatus(jobId) {
+            const interval = setInterval(async () => {
+                const response = await fetch(`/status/${jobId}`);
+                const data = await response.json();
+
+                statusDiv.textContent = `Status: ${data.status}`;
+                if (data.status === 'done') {
+                    clearInterval(interval);
+                    audioPlayer.src = data.audio_url;
+                    audioPlayer.style.display = 'block';
+                    audioPlayer.load();
+                    statusDiv.textContent = 'Ready to play!';
+                } else if (data.status === 'failed' || data.status === 'error') {
+                    clearInterval(interval);
+                    statusDiv.textContent = 'Something went wrong.';
+                }
+            }, 2000); // Poll every 2 seconds
+        }
     </script>
 </body>
 </html>
