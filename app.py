@@ -58,7 +58,7 @@ def generate_audio_task(script):
     audio_path = os.path.join(os.path.dirname(__file__), 'static', 'meditation.mp3')
     final_audio.export(audio_path, format="mp3")
     logging.info(f"Audio saved at: {audio_path}, exists: {os.path.exists(audio_path)}")
-    return url_for('static', filename='meditation.mp3', _external=True)  # Full URL
+    return "meditation.mp3"  # Return filename only
 
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -71,11 +71,12 @@ def index():
 
 @app.route("/status/<job_id>")
 def check_status(job_id):
-    job = Job.fetch(job_id, connection=redis_conn)  # Use Job.fetch for RQ
+    job = Job.fetch(job_id, connection=redis_conn)
     if job is None or job.is_failed:
         return jsonify({"status": "failed"})
     elif job.is_finished:
-        audio_url = job.result  # Full URL from generate_audio_task
+        audio_filename = job.result  # Get filename from worker
+        audio_url = url_for('static', filename=audio_filename, _external=True)
         return jsonify({"status": "done", "audio_url": audio_url})
     else:
         return jsonify({"status": "processing"})
