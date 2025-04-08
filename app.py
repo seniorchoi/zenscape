@@ -3,8 +3,8 @@ from openai import OpenAI
 from elevenlabs.client import ElevenLabs
 from dotenv import load_dotenv
 from pydub import AudioSegment
-from rq import Queue
-from rq.job import Job
+from rq import Queue, Job
+import rq  # Add this import
 import os
 import re
 import io
@@ -59,7 +59,7 @@ def generate_audio_task(script):
     final_audio.export(audio_buffer, format="mp3")
     audio_data = audio_buffer.getvalue()
     audio_buffer.close()
-    job_id = rq.get_current_job().id  # Get job ID in worker context
+    job_id = rq.get_current_job().id  # Now works with rq imported
     redis_conn.setex(f"audio:{job_id}", 3600, audio_data)  # Store for 1 hour
     logging.info(f"Audio stored in Redis for job {job_id}")
     return job_id  # Return job ID to fetch audio later
@@ -100,7 +100,7 @@ def generate_meditation_script(situation):
     prompt = f"""
     Create a 10-minute guided meditation script for someone feeling anxious about '{situation}'. 
     Keep it calm, positive, and soothing. Include a short intro, breathing exercises, visualization, 
-    and a gentle closing. Aim for about 500 words (roughly 5 minutes when spoken). 
+    and a gentle closing. Aim for about 800-1000 words (roughly 10 minutes when spoken). 
     Naturally incorporate the exact phrase 'now, take a moment of silence' here and there throughout 
     the script to indicate pauses, using it at least 3-5 times in appropriate spots. 
     Do not use Markdown, asterisks (*), bullet points, or any special formatting characters—just plain text.
