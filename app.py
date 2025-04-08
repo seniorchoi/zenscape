@@ -3,7 +3,8 @@ from openai import OpenAI
 from elevenlabs.client import ElevenLabs
 from dotenv import load_dotenv
 from pydub import AudioSegment
-from rq import Queue, Job
+from rq import Queue
+from rq.job import Job
 import rq  # Add this import
 import os
 import re
