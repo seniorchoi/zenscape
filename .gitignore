@@ -1,0 +1,29 @@
+# Python virtual environment
+venv/
+env/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment variables
+.env
+
+# Flask-specific
+instance/
+*.log
+
+# Static files generated during runtime (e.g., meditation.mp3)
+static/meditation.mp3
+
+# macOS-specific
+.DS_Store
+
+# Editor files
+*.swp
+*~
+*.bak
+
+# Heroku-specific (optional, if you add later)
+*.sqlite3
