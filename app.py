@@ -38,9 +38,8 @@ def generate_audio_task(script):
 
     bg_music = AudioSegment.from_mp3("static/background_music.mp3")
     bg_music = bg_music * int(720000 / len(bg_music)) + bg_music[:720000 % len(bg_music)]
-    bg_music = bg_music - 20
+    bg_music = bg_music - 30
 
-    # Split script at "now, take a moment of silence" and add pauses
     parts = re.split(r"(now, take a moment of silence)", script, flags=re.IGNORECASE)
     final_audio = AudioSegment.empty()
     current_pos = 0
@@ -53,7 +52,7 @@ def generate_audio_task(script):
             part_audio = full_audio[current_pos:current_pos + part_duration]
             final_audio += part_audio
             current_pos += part_duration
-        if i < len(parts) - 1 and part:  # Add 30s silence after "moment of silence"
+        if i < len(parts) - 1 and part:
             final_audio += AudioSegment.silent(duration=30000)
 
     final_audio = final_audio.overlay(bg_music, position=0)
@@ -61,10 +60,10 @@ def generate_audio_task(script):
     final_audio.export(audio_buffer, format="mp3")
     audio_data = audio_buffer.getvalue()
     audio_buffer.close()
-    job_id = rq.get_current_job().id
-    redis_conn.setex(f"audio:{job_id}", 3600, audio_data)
+    job_id = rq.get_current_job().id  # Now works with rq imported
+    redis_conn.setex(f"audio:{job_id}", 3600, audio_data)  # Store for 1 hour
     logging.info(f"Audio stored in Redis for job {job_id}")
-    return job_id
+    return job_id  # Return job ID to fetch audio later
 
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -115,7 +114,6 @@ def generate_meditation_script(situation):
     )
     script = response.choices[0].message.content
     script = re.sub(r"\*+", "", script)
-    print(script)
     return script
 
 if __name__ == "__main__":
