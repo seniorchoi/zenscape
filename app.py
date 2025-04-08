@@ -1,20 +1,25 @@
-from flask import Flask, request, render_template, jsonify
+from flask import Flask, request, render_template, jsonify, url_for
 from openai import OpenAI
 from elevenlabs.client import ElevenLabs
 from dotenv import load_dotenv
 from pydub import AudioSegment
 from rq import Queue
+from rq.job import Job
 import os
 import re
 import io
 import time
+import logging
 from redis_config import get_redis_connection
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 
 load_dotenv()
 if not os.path.exists("static"):
     os.makedirs("static")
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static', static_url_path='/static')
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 elevenlabs_client = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
 redis_conn = get_redis_connection()
@@ -50,9 +55,10 @@ def generate_audio_task(script):
             final_audio += AudioSegment.silent(duration=30000)
 
     final_audio = final_audio.overlay(bg_music, position=0)
-    audio_path = "static/meditation.mp3"
+    audio_path = os.path.join(os.path.dirname(__file__), 'static', 'meditation.mp3')
     final_audio.export(audio_path, format="mp3")
-    return audio_path
+    logging.info(f"Audio saved at: {audio_path}, exists: {os.path.exists(audio_path)}")
+    return url_for('static', filename='meditation.mp3', _external=True)  # Full URL
 
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -65,12 +71,11 @@ def index():
 
 @app.route("/status/<job_id>")
 def check_status(job_id):
-    job = q.fetch_job(job_id)
+    job = Job.fetch(job_id, connection=redis_conn)  # Use Job.fetch for RQ
     if job is None or job.is_failed:
         return jsonify({"status": "failed"})
     elif job.is_finished:
-        audio_path = job.result
-        audio_url = f"/static/{os.path.basename(audio_path)}"
+        audio_url = job.result  # Full URL from generate_audio_task
         return jsonify({"status": "done", "audio_url": audio_url})
     else:
         return jsonify({"status": "processing"})
