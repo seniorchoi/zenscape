@@ -9,6 +9,7 @@ import os
 import re
 import io
 import time
+from urllib.parse import urlparse
 
 load_dotenv()
 if not os.path.exists("static"):
@@ -17,7 +18,18 @@ if not os.path.exists("static"):
 app = Flask(__name__)
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 elevenlabs_client = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
-redis_conn = Redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"))
+
+# Parse REDIS_URL and configure Redis connection
+redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+parsed_url = urlparse(redis_url)
+redis_conn = Redis(
+    host=parsed_url.hostname,
+    port=parsed_url.port,
+    username=parsed_url.username,
+    password=parsed_url.password,
+    ssl=True,  # Enable SSL for Heroku Redis
+    ssl_cert_reqs=None  # Disable certificate verification (temporary fix)
+)
 q = Queue(connection=redis_conn)
 
 def generate_audio_task(script):
