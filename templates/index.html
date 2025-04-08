@@ -3,18 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zenscape</title>
+    <title>Guided Meditation Generator</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <h1>Zenscape</h1>
+    <h1>Create Your Guided Meditation</h1>
     <form id="meditation-form">
         <label for="situation">What’s making you anxious?</label><br>
         <input type="text" id="situation" name="situation" placeholder="e.g., before job interview" required><br>
         <button type="submit">Generate Meditation</button>
     </form>
 
-    <!-- Loading indicator -->
     <div id="loading" style="display: none;">
         <div class="spinner"></div>
         <p>Your audio is being generated...</p>
@@ -23,18 +22,12 @@
         </div>
     </div>
 
-    <!-- Audio player container -->
     <div id="audio-player" style="display: none;">
         <audio controls>
             <source id="audio-source" src="" type="audio/mp3">
             Your browser does not support the audio element.
         </audio>
     </div>
-    <footer>
-        <br/>
-        <div>idea by Gage</div>
-        <div>made by Sean</div>
-    </footer>
 
     <script>
         document.getElementById("meditation-form").addEventListener("submit", function(event) {
@@ -42,29 +35,23 @@
             const form = this;
             const situation = form.situation.value;
 
-            // Show loading indicator
             const loadingDiv = document.getElementById("loading");
             const progressBar = loadingDiv.querySelector(".progress");
             loadingDiv.style.display = "block";
             document.getElementById("audio-player").style.display = "none";
 
-            // Start loading bar animation (0% to 100% over 2 minutes)
             let progress = 0;
             progressBar.style.width = "0%";
             progressBar.textContent = "0%";
-            const totalTime = 120000; // 2 minutes in milliseconds
-            const increment = 100 / (totalTime / 100); // Update every 100ms
+            const totalTime = 120000;
+            const increment = 100 / (totalTime / 100);
             const interval = setInterval(() => {
                 progress += increment;
-                if (progress >= 100) {
-                    progress = 100;
-                    clearInterval(interval);
-                }
+                if (progress >= 100) progress = 100;
                 progressBar.style.width = progress + "%";
                 progressBar.textContent = Math.round(progress) + "%";
             }, 100);
 
-            // Send POST request
             fetch("/", {
                 method: "POST",
                 body: new FormData(form),
@@ -72,21 +59,30 @@
             })
             .then(response => response.json())
             .then(data => {
-                // Stop loading bar at 100% and hide
-                clearInterval(interval);
-                progressBar.style.width = "100%";
-                progressBar.textContent = "100%";
-                setTimeout(() => { loadingDiv.style.display = "none"; }, 500);
-
-                if (data.error) {
-                    alert("Error: " + data.error);
-                } else {
-                    // Show audio player
-                    const audioSource = document.getElementById("audio-source");
-                    audioSource.src = data.audio_url + "?t=" + new Date().getTime();
-                    document.getElementById("audio-player").style.display = "block";
-                    document.querySelector("audio").load();
-                }
+                const jobId = data.job_id;
+                const checkStatus = () => {
+                    fetch(`/status/${jobId}`)
+                    .then(resp => resp.json())
+                    .then(status => {
+                        if (status.status === "done") {
+                            clearInterval(interval);
+                            progressBar.style.width = "100%";
+                            progressBar.textContent = "100%";
+                            setTimeout(() => { loadingDiv.style.display = "none"; }, 500);
+                            const audioSource = document.getElementById("audio-source");
+                            audioSource.src = status.audio_url + "?t=" + new Date().getTime();
+                            document.getElementById("audio-player").style.display = "block";
+                            document.querySelector("audio").load();
+                        } else if (status.status === "failed") {
+                            clearInterval(interval);
+                            loadingDiv.style.display = "none";
+                            alert("Audio generation failed.");
+                        } else {
+                            setTimeout(checkStatus, 2000); // Poll every 2s
+                        }
+                    });
+                };
+                checkStatus();
             })
             .catch(error => {
                 clearInterval(interval);
