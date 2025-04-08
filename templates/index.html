@@ -3,15 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Guided Meditation Generator</title>
+    <title>Zenscape</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <h1>Create Your Guided Meditation</h1>
+    <h1>Zenscape</h1>
     <form id="meditation-form">
         <label for="situation">What’s making you anxious?</label><br>
         <input type="text" id="situation" name="situation" placeholder="e.g., before job interview" required><br>
         <button type="submit">Generate Meditation</button>
+        
+        <div id="example-prompts">
+            <span class="prompt-bubble" data-text="nervous before job interview">nervous before job interview</span>
+            <span class="prompt-bubble" data-text="feeling uneasy with a girl I like">feeling uneasy with a girl I like</span>
+            <span class="prompt-bubble" data-text="stressed about moving to a new city">stressed about moving to a new city</span>
+        </div>
     </form>
 
     <div id="loading" style="display: none;">
@@ -78,7 +84,7 @@
                             loadingDiv.style.display = "none";
                             alert("Audio generation failed.");
                         } else {
-                            setTimeout(checkStatus, 2000); // Poll every 2s
+                            setTimeout(checkStatus, 2000);
                         }
                     });
                 };
@@ -88,6 +94,15 @@
                 clearInterval(interval);
                 loadingDiv.style.display = "none";
                 alert("An error occurred: " + error);
+            });
+        });
+
+        // Add click handler for prompt bubbles
+        document.querySelectorAll(".prompt-bubble").forEach(bubble => {
+            bubble.addEventListener("click", function() {
+                const input = document.getElementById("situation");
+                input.value = this.getAttribute("data-text");
+                document.getElementById("example-prompts").style.display = "none";
             });
         });
     </script>
