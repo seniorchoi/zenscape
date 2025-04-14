@@ -38,6 +38,12 @@ Create a new file named `.env` and include the following:
     OPENAI_API_KEY=
     ELEVENLABS_API_KEY=
 
+    REDIS_URL=redis://localhost:6379
+    
+    STRIPE_SECRET_KEY=
+    STRIPE_PUBLISHABLE_KEY=
+    STRIPE_WEBHOOK_SECRET=
+
 You can grab your API keys here:
 - [OpenAI API Keys](https://platform.openai.com/settings/organization/api-keys)
 - [Eleven Labs API Keys](https://elevenlabs.io/)
