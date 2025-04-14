@@ -5,12 +5,59 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Zenscape</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .collapsible {
+            cursor: pointer;
+            color: #007bff;
+            text-decoration: underline;
+            margin: 10px 0;
+        }
+        .script-content {
+            display: none;
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .script-content.show {
+            display: block;
+        }
+        #saved-files ul {
+            list-style: none;
+            padding: 0;
+        }
+        #saved-files li {
+            margin-bottom: 20px;
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        #result {
+            margin-top: 20px;
+        }
+        audio {
+            width: 100%;
+            margin: 10px 0;
+        }
+    </style>
 </head>
 <body>
+    <header>
+        <div class="credits-display">
+            {% if current_user.is_authenticated %}
+                Credits: {{ credits }}
+                <a href="{{ url_for('payments') }}">Buy Credits</a> |
+                <a href="{{ url_for('logout') }}">Logout</a>
+            {% else %}
+                Credits: 0
+                <a href="{{ url_for('login') }}">Login</a> | <a href="{{ url_for('signup') }}">Signup</a>
+            {% endif %}
+        </div>
+    </header>
     <h1>Zenscape</h1>
     <form id="meditation-form">
-        <label for="situation">What’s making you anxious?</label><br>
-        <input type="text" id="situation" name="situation" placeholder="e.g., before job interview" required><br>
+        <label for="situation">What's making you anxious?</label>
+        <input type="text" id="situation" name="situation" placeholder="e.g., before job interview" 
+               value="{{ situation if situation else '' }}" required>
         <button type="submit">Generate Meditation</button>
         
         <div id="example-prompts">
@@ -20,89 +67,177 @@
         </div>
     </form>
 
+    <div id="error" style="display: none; color: red; margin: 10px 0;"></div>
+
     <div id="loading" style="display: none;">
         <div class="spinner"></div>
-        <p>Your audio is being generated...</p>
+        <p>Your meditation is being generated...</p>
         <div class="loading-bar">
             <div class="progress" style="width: 0%;">0%</div>
         </div>
     </div>
 
-    <div id="audio-player" style="display: none;">
-        <audio controls>
-            <source id="audio-source" src="" type="audio/mp3">
-            Your browser does not support the audio element.
-        </audio>
+    <div id="result" style="display: none;">
+        <div id="audio-player">
+            <audio controls>
+                <source id="audio-source" src="" type="audio/mp3">
+                Your browser does not support the audio element.
+            </audio>
+        </div>
+        <div id="script-display-final">
+            <h2 class="collapsible">Meditation Script (Click to Expand)</h2>
+            <p id="script-content-final" class="script-content"></p>
+        </div>
     </div>
 
+    {% if current_user.is_authenticated and saved_files %}
+    <div id="saved-files">
+        <h2>Your Saved Meditations</h2>
+        <ul>
+            {% for file in saved_files %}
+            <li>
+                <strong>{{ file.situation }}</strong> (Created: {{ file.created_at }})
+                <audio controls>
+                    <source src="{{ file.audio_url }}" type="audio/mp3">
+                    Your browser does not support the audio element.
+                </audio>
+                <div>
+                    <h3 class="collapsible">Script (Click to Expand)</h3>
+                    <p class="script-content" data-job-id="{{ file.job_id }}"></p>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
     <script>
-        document.getElementById("meditation-form").addEventListener("submit", function(event) {
+        // Toggle collapsible script sections
+        function setupCollapsible() {
+            document.querySelectorAll('.collapsible').forEach(header => {
+                header.removeEventListener('click', toggleScript);
+                header.addEventListener('click', toggleScript);
+            });
+        }
+
+        function toggleScript() {
+            const content = this.nextElementSibling;
+            content.classList.toggle('show');
+            if (content.classList.contains('show') && !content.textContent && content.dataset.jobId) {
+                loadSavedScript(content.dataset.jobId, content);
+            }
+        }
+
+        // Fetch script for saved files
+        function loadSavedScript(jobId, element) {
+            fetch('/get_script/' + jobId)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.script) {
+                        element.textContent = data.script;
+                    } else {
+                        element.textContent = 'Script not found.';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching script:', error);
+                    element.textContent = 'Error loading script.';
+                });
+        }
+
+        // Initialize collapsible sections
+        setupCollapsible();
+
+        document.getElementById('meditation-form').addEventListener('submit', function(event) {
             event.preventDefault();
             const form = this;
             const situation = form.situation.value;
 
-            const loadingDiv = document.getElementById("loading");
-            const progressBar = loadingDiv.querySelector(".progress");
-            loadingDiv.style.display = "block";
-            document.getElementById("audio-player").style.display = "none";
+            const loadingDiv = document.getElementById('loading');
+            const progressBar = loadingDiv.querySelector('.progress');
+            const resultDiv = document.getElementById('result');
+            const scriptDisplayFinal = document.getElementById('script-display-final');
+            const scriptContentFinal = document.getElementById('script-content-final');
+            const audioPlayer = document.getElementById('audio-player');
+            const errorDiv = document.getElementById('error');
+
+            loadingDiv.style.display = 'block';
+            resultDiv.style.display = 'none';
+            errorDiv.style.display = 'none';
+            scriptContentFinal.textContent = '';
+            audioPlayer.style.display = 'none';
+            scriptContentFinal.classList.remove('show');
 
             let progress = 0;
-            progressBar.style.width = "0%";
-            progressBar.textContent = "0%";
-            const totalTime = 120000;
+            progressBar.style.width = '0%';
+            progressBar.textContent = '0%';
+            const totalTime = 15000;
             const increment = 100 / (totalTime / 100);
             const interval = setInterval(() => {
                 progress += increment;
                 if (progress >= 100) progress = 100;
-                progressBar.style.width = progress + "%";
-                progressBar.textContent = Math.round(progress) + "%";
+                progressBar.style.width = progress + '%';
+                progressBar.textContent = Math.round(progress) + '%';
             }, 100);
 
-            fetch("/", {
-                method: "POST",
+            fetch('/', {
+                method: 'POST',
                 body: new FormData(form),
-                headers: { "X-Requested-With": "XMLHttpRequest" }
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) throw new Error('Network response was not ok');
+                return response.json();
+            })
             .then(data => {
-                const jobId = data.job_id;
-                const checkStatus = () => {
-                    fetch(`/status/${jobId}`)
-                    .then(resp => resp.json())
-                    .then(status => {
-                        if (status.status === "done") {
-                            clearInterval(interval);
-                            progressBar.style.width = "100%";
-                            progressBar.textContent = "100%";
-                            setTimeout(() => { loadingDiv.style.display = "none"; }, 500);
-                            const audioSource = document.getElementById("audio-source");
-                            audioSource.src = status.audio_url + "?t=" + new Date().getTime();
-                            document.getElementById("audio-player").style.display = "block";
-                            document.querySelector("audio").load();
-                        } else if (status.status === "failed") {
-                            clearInterval(interval);
-                            loadingDiv.style.display = "none";
-                            alert("Audio generation failed.");
-                        } else {
-                            setTimeout(checkStatus, 2000);
-                        }
-                    });
-                };
-                checkStatus();
+                console.log('Form submission data:', data);
+                if (data.redirect) {
+                    window.location.href = data.redirect;
+                    return;
+                }
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                scriptContentFinal.textContent = data.script;
+                resultDiv.style.display = 'block';
+                scriptDisplayFinal.style.display = 'block';
+                scriptContentFinal.classList.add('show');
+
+                document.querySelector('.credits-display').innerHTML = 
+                    `Credits: ${data.credits} <a href="{{ url_for('payments') }}">Buy Credits</a> | <a href="{{ url_for('logout') }}">Logout</a>`;
+
+                setTimeout(() => {
+                    clearInterval(interval);
+                    progressBar.style.width = '100%';
+                    progressBar.textContent = '100%';
+                    setTimeout(() => {
+                        loadingDiv.style.display = 'none';
+                        audioPlayer.style.display = 'block';
+                        const audioSource = document.getElementById('audio-source');
+                        audioSource.src = data.audio_url;
+                        document.querySelector('#result audio').load();
+                        scriptContentFinal.classList.remove('show');
+                        setupCollapsible();
+                        setTimeout(() => window.location.reload(), 1000);
+                    }, 500);
+                }, 2000);
             })
             .catch(error => {
                 clearInterval(interval);
-                loadingDiv.style.display = "none";
-                alert("An error occurred: " + error);
+                loadingDiv.style.display = 'none';
+                resultDiv.style.display = 'none';
+                errorDiv.textContent = `Error: ${error.message}`;
+                errorDiv.style.display = 'block';
+                console.error('Form submission error:', error);
             });
         });
 
-        // Add click handler for prompt bubbles
-        document.querySelectorAll(".prompt-bubble").forEach(bubble => {
-            bubble.addEventListener("click", function() {
-                const input = document.getElementById("situation");
-                input.value = this.getAttribute("data-text");
-                document.getElementById("example-prompts").style.display = "none";
+        document.querySelectorAll('.prompt-bubble').forEach(bubble => {
+            bubble.addEventListener('click', function() {
+                const input = document.getElementById('situation');
+                input.value = this.getAttribute('data-text');
+                document.getElementById('example-prompts').style.display = 'none';
             });
         });
     </script>

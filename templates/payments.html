@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zenscape - Get More Credits</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <div class="credits-display">
+            Credits: {{ current_user.credits }}
+            <a href="{{ url_for('index') }}">Home</a> | <a href="{{ url_for('logout') }}">Logout</a>
+        </div>
+    </header>
+    <h1>Find Your Calm with Zenscape</h1>
+    <p class="subtitle">Purchase 10 credits for $19 to unlock personalized meditation sessions tailored to your needs.</p>
+    
+    <div class="benefits">
+        <div class="benefit">
+            <h3>Personalized Meditations</h3>
+            <p>Address any anxiety, from job interviews to personal challenges, with custom-guided sessions.</p>
+        </div>
+        <div class="benefit">
+            <h3>Save Forever</h3>
+            <p>Keep your meditations stored securely, ready to revisit whenever you need peace.</p>
+        </div>
+        <div class="benefit">
+            <h3>Soothing Audio</h3>
+            <p>Enjoy ~5-minute sessions with high-quality, calming voiceovers to relax your mind.</p>
+        </div>
+        <div class="benefit">
+            <h3>Instant Relief</h3>
+            <p>Generate scripts and audio in seconds for on-demand tranquility.</p>
+        </div>
+    </div>
+
+    <div class="pricing">
+        <h2>10 Credits</h2>
+        <div class="price">$19</div>
+        <p>Enough for 10 unique meditation sessions to ease your mind.</p>
+        <button id="buy-button">Buy Now</button>
+    </div>
+
+    <script src="https://js.stripe.com/v3/"></script>
+    <script>
+        const stripe = Stripe('{{ stripe_publishable_key }}');
+        const buyButton = document.getElementById('buy-button');
+    
+        buyButton.addEventListener('click', async function() {
+            console.log('Buy Now clicked');
+            buyButton.disabled = true;
+            buyButton.textContent = 'Processing...';
+    
+            try {
+                const response = await fetch('/create-checkout-session', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest' 
+                    }
+                });
+                console.log('Fetch response:', response);
+    
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+    
+                const data = await response.json();
+                console.log('Response data:', data);
+    
+                if (data.error) {
+                    console.error('Server error:', data.error);
+                    alert('Error: ' + data.error);
+                    buyButton.disabled = false;
+                    buyButton.textContent = 'Buy Now';
+                    return;
+                }
+    
+                console.log('Redirecting to Stripe Checkout with session ID:', data.id);
+                const result = await stripe.redirectToCheckout({ sessionId: data.id });
+                if (result.error) {
+                    console.error('Stripe redirect error:', result.error.message);
+                    alert('Stripe Error: ' + result.error.message);
+                    buyButton.disabled = false;
+                    buyButton.textContent = 'Buy Now';
+                }
+            } catch (error) {
+                console.error('Checkout error:', error);
+                alert('An error occurred: ' + error.message);
+                buyButton.disabled = false;
+                buyButton.textContent = 'Buy Now';
+            }
+        });
+    </script>
+</body>
+</html>
